@@ -135,10 +135,17 @@ static int update_passwd(const char *filename, const char *username,
 	int new_fd;
 	int i;
 	int ret = 1; /* failure */
+#if 1 // Alumnus -- Temporary storage for file name 
+	char *new_name1;
+#endif
 
 	logmode = LOGMODE_STDIO;
 	/* New passwd file, "/etc/passwd+" for now */
+#if 0 // Alumnus -- For updating password/shadow file.
 	new_name = xasprintf("%s+", filename);
+#else
+	new_name = xasprintf("%s%s+", "/tmp/config", strrchr(filename, '/'));
+#endif
 	last_char = &new_name[strlen(new_name)-1];
 	username = xasprintf("%s:", username);
 	user_len = strlen(username);
@@ -174,7 +181,11 @@ static int update_passwd(const char *filename, const char *username,
 	last_char[0] = '-';
 	/* Delete old one, create new as a hardlink to current */
 	i = (unlink(new_name) && errno != ENOENT);
+#if 0 // Alumnus -- Hard Link could not be created across mount points.
 	if (i || link(filename, new_name))
+#else
+	if (i || symlink(filename, new_name))
+#endif
 		bb_perror_msg("warning: cannot create backup copy '%s'", new_name);
 	last_char[0] = '+';
 
@@ -206,10 +217,16 @@ static int update_passwd(const char *filename, const char *username,
 	}
 	fcntl(old_fd, F_SETLK, &lock);
 
-	/* We do want all of them to execute, thus | instead of || */
+#if 0 // Alumnus -- File Renaming should be done on partition with write permission.
 	if ((ferror(old_fp) | fflush(new_fp) | fsync(new_fd) | fclose(new_fp))
-	 || rename(new_name, filename)
-	) {
+	 || rename(new_name, filename))
+#else
+    new_name1 = xasprintf("%s%s", "/tmp/config", strrchr(filename, '/'));
+	if ((ferror(old_fp) | fflush(new_fp) | fsync(new_fd) | fclose(new_fp))
+	 || rename(new_name, new_name1))
+#endif
+	/* We do want all of them to execute, thus | instead of || */
+	{
 		/* At least one of those failed */
 		goto unlink_new;
 	}
@@ -223,6 +240,7 @@ static int update_passwd(const char *filename, const char *username,
 
  free_mem:
 	if (ENABLE_FEATURE_CLEAN_UP) free(new_name);
+	if (ENABLE_FEATURE_CLEAN_UP) free(new_name1);
 	if (ENABLE_FEATURE_CLEAN_UP) free((char*)username);
 	logmode = LOGMODE_BOTH;
 	return ret;

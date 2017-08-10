@@ -70,7 +70,7 @@ static void ping(const char *host)
 	struct sockaddr_in pingaddr;
 	struct icmp *pkt;
 	int pingsock, c;
-	char packet[DEFDATALEN + MAXIPLEN + MAXICMPLEN];
+	char packet[datalen + ICMP_MINLEN + MAXIPLEN + MAXICMPLEN];
 
 	pingsock = create_icmp_socket();
 
@@ -86,7 +86,7 @@ static void ping(const char *host)
 	pkt->icmp_type = ICMP_ECHO;
 	pkt->icmp_cksum = in_cksum((unsigned short *) pkt, sizeof(packet));
 
-	c = sendto(pingsock, packet, DEFDATALEN + ICMP_MINLEN, 0,
+	c = sendto(pingsock, packet, datalen + ICMP_MINLEN, 0,
 			   (struct sockaddr *) &pingaddr, sizeof(struct sockaddr_in));
 
 	if (c < 0) {
@@ -273,6 +273,10 @@ static void unpack(char *buf, int sz, struct sockaddr_in *from)
 		u_int16_t recv_seq = ntohs(icmppkt->icmp_seq);
 		++nreceived;
 		tp = (struct timeval *) icmppkt->icmp_data;
+
+		/* If packet is too short, results will be truncated */
+		if (sz < (ICMP_MINLEN + sizeof(tv.tv_sec) + sizeof(tv.tv_usec)))
+			return;
 
 		if ((tv.tv_usec -= tp->tv_usec) < 0) {
 			--tv.tv_sec;

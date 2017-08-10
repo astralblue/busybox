@@ -78,6 +78,7 @@ static void add_requests(struct dhcpMessage *packet)
 int send_discover(unsigned long xid, unsigned long requested)
 {
 	struct dhcpMessage packet;
+	static int msgs = 0;
 
 	init_packet(&packet, DHCPDISCOVER);
 	packet.xid = xid;
@@ -85,7 +86,8 @@ int send_discover(unsigned long xid, unsigned long requested)
 		add_simple_option(packet.options, DHCP_REQUESTED_IP, requested);
 
 	add_requests(&packet);
-	bb_info_msg("Sending discover...");
+	if (msgs++ < 3)
+		bb_info_msg("Sending discover...");
 	return udhcp_raw_packet(&packet, INADDR_ANY, CLIENT_PORT, INADDR_BROADCAST,
 			SERVER_PORT, MAC_BCAST_ADDR, client_config.ifindex);
 }

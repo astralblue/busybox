@@ -919,6 +919,10 @@ traceroute_main(int argc, char *argv[])
 	char *pausemsecs_str = NULL;
 	int first_ttl = 1;
 	char *first_ttl_str = NULL;
+#if ENABLE_FEATURE_DNI_BAND_CHECK
+	int ttl_set =0;
+	char *ttl_set_str = NULL;
+#endif
 #if ENABLE_FEATURE_TRACEROUTE_SOURCE_ROUTE
 	llist_t *sourse_route_list = NULL;
 #endif
@@ -931,6 +935,7 @@ traceroute_main(int argc, char *argv[])
 #endif
 
 	op = getopt32(argc, argv, "FIlnrdvxt:i:m:p:q:s:w:z:f:"
+
 #define USAGE_OP_DONT_FRAGMNT (1<<0)    /* F  */
 #define USAGE_OP_USE_ICMP     (1<<1)    /* I  */
 #define USAGE_OP_TTL_FLAG     (1<<2)    /* l  */
@@ -940,11 +945,18 @@ traceroute_main(int argc, char *argv[])
 #define USAGE_OP_VERBOSE      (1<<6)    /* v */
 #define USAGE_OP_IP_CHKSUM    (1<<7)    /* x */
 
+#if ENABLE_FEATURE_DNI_BAND_CHECK
+					"T:"
+#endif
+
 #if ENABLE_FEATURE_TRACEROUTE_SOURCE_ROUTE
 					"g:"
 #endif
 	, &tos_str, &device, &max_ttl_str, &port_str, &nprobes_str,
 	&source, &waittime_str, &pausemsecs_str, &first_ttl_str
+#if ENABLE_FEATURE_DNI_BAND_CHECK
+	, &ttl_set_str
+#endif
 #if ENABLE_FEATURE_TRACEROUTE_SOURCE_ROUTE
 	, &sourse_route_list
 #endif
@@ -979,11 +991,16 @@ traceroute_main(int argc, char *argv[])
 		if (getuid()) bb_error_msg_and_die("-s %s: permission denied", source);
 	}
 	if (waittime_str)
-		waittime = xatoul_range(waittime_str, 2, 24 * 60 * 60);
+		waittime = xatoul_range(waittime_str, 1, 24 * 60 * 60);
 	if (pausemsecs_str)
 		pausemsecs = xatoul_range(pausemsecs_str, 0, 60 * 60 * 1000);
 	if (first_ttl_str)
 		first_ttl = xatoul_range(first_ttl_str, 1, 255);
+
+#if ENABLE_FEATURE_DNI_BAND_CHECK
+	if (ttl_set_str)
+		ttl_set = xatoul_range(ttl_set_str, 1, 255);
+#endif
 
 #if ENABLE_FEATURE_TRACEROUTE_SOURCE_ROUTE
 	if (sourse_route_list) {
@@ -1210,7 +1227,11 @@ traceroute_main(int argc, char *argv[])
 	fprintf(stderr, ", %d hops max, %d byte packets\n", max_ttl, packlen);
 	(void)fflush(stderr);
 
-	for (ttl = first_ttl; ttl <= max_ttl; ++ttl) {
+	for (ttl = first_ttl; ttl <= max_ttl 
+#if ENABLE_FEATURE_DNI_BAND_CHECK
+		&& NULL == ttl_set_str
+#endif
+						; ++ttl) {
 		u_int32_t lastaddr = 0;
 		int gotlastaddr = 0;
 		int got_there = 0;
@@ -1242,6 +1263,158 @@ traceroute_main(int argc, char *argv[])
 					++gotlastaddr;
 				}
 				printf("  %.3f ms", deltaT(&t1, &t2));
+				ip = (struct ip *)packet;
+				if (op & USAGE_OP_TTL_FLAG)
+					printf(" (%d)", ip->ip_ttl);
+				if (i == -2) {
+					if (ip->ip_ttl <= 1)
+						printf(" !");
+					++got_there;
+					break;
+				}
+				/* time exceeded in transit */
+				if (i == -1)
+					break;
+				code = i - 1;
+				switch (code) {
+
+				case ICMP_UNREACH_PORT:
+					if (ip->ip_ttl <= 1)
+						printf(" !");
+					/* Got the destination and ttl>1 */
+					else
+						printf(" !PT");
+					++got_there;
+					break;
+
+				case ICMP_UNREACH_NET:
+					++unreachable;
+					printf(" !N");
+					break;
+
+				case ICMP_UNREACH_HOST:
+					++unreachable;
+					printf(" !H");
+					break;
+
+				case ICMP_UNREACH_PROTOCOL:
+					++got_there;
+					printf(" !P");
+					break;
+
+				case ICMP_UNREACH_NEEDFRAG:
+					++unreachable;
+					printf(" !F-%d", pmtu);
+					break;
+
+				case ICMP_UNREACH_SRCFAIL:
+					++unreachable;
+					printf(" !S");
+					break;
+
+				case ICMP_UNREACH_FILTER_PROHIB:
+				case ICMP_UNREACH_NET_PROHIB:   /* misuse */
+					++unreachable;
+					printf(" !A");
+					break;
+
+				case ICMP_UNREACH_HOST_PROHIB:
+					++unreachable;
+					printf(" !C");
+					break;
+
+				case ICMP_UNREACH_HOST_PRECEDENCE:
+					++unreachable;
+					printf(" !V");
+					break;
+
+				case ICMP_UNREACH_PRECEDENCE_CUTOFF:
+					++unreachable;
+					printf(" !C");
+					break;
+
+				case ICMP_UNREACH_NET_UNKNOWN:
+				case ICMP_UNREACH_HOST_UNKNOWN:
+					++unreachable;
+					printf(" !U");
+					break;
+
+				case ICMP_UNREACH_ISOLATED:
+					++unreachable;
+					printf(" !I");
+					break;
+
+				case ICMP_UNREACH_TOSNET:
+				case ICMP_UNREACH_TOSHOST:
+					++unreachable;
+					printf(" !T");
+					break;
+
+				default:
+					++unreachable;
+					printf(" !<%d>", code);
+					break;
+				}
+				break;
+			}
+			if (cc == 0)
+				printf(" *");
+			(void)fflush(stdout);
+		}
+		putchar('\n');
+		if (got_there ||
+		    (unreachable > 0 && unreachable >= nprobes - 1))
+			break;
+	}
+
+#if ENABLE_FEATURE_DNI_BAND_CHECK
+	int loop;
+	int count = 0;
+	double bandwidth = 0;	
+	double interval = 0;
+	for (loop = 0; loop < 20 && ttl_set_str != NULL; ++loop) {
+		u_int32_t lastaddr = 0;
+		int gotlastaddr = 0;
+		int got_there = 0;
+		int unreachable = 0;
+		int sentfirst = 0;
+
+		printf("%2d ", ttl_set);
+			int cc;
+			struct timeval t1, t2;
+			struct timezone tz;
+			struct ip *ip;
+
+			if (sentfirst && pausemsecs > 0)
+				usleep(pausemsecs * 1000);
+			(void)gettimeofday(&t1, &tz);
+			/* Spec 2.0: BW_UDP_Packets(TTL_M) means a UDP packet with destination
+			 * port =33434+TTL_M,data =MTU size IP data(header+payload) and TTL= TTL_M
+			 *
+			 * Send 20 BW_UDP_Packets(TTL_M) to www.netgear.com then measures
+			 * the interarrival time of each replies and calculates the uplink bandwidth.
+			 * */
+			send_probe(ttl_set, ttl_set, &t1);
+			++sentfirst;
+			while ((cc = wait_for_reply(s, from, &t1)) != 0) {
+				(void)gettimeofday(&t2, &tz);
+				i = packet_ok(packet, cc, from, ttl_set);
+				/* Skip short packet */
+				if (i == 0)
+					continue;
+				if (!gotlastaddr ||
+				    from->sin_addr.s_addr != lastaddr) {
+					print(packet, cc, from);
+					lastaddr = from->sin_addr.s_addr;
+					++gotlastaddr;
+				}
+				printf("  %.3f ms", deltaT(&t1, &t2));
+				count++;
+				if (loop > 0)
+				{
+					interval += deltaT(&t1, &t2);
+					printf(" %.3f ms", interval);
+				}
 				ip = (struct ip *)packet;
 				if (op & USAGE_OP_TTL_FLAG)
 					printf(" (%d)", ip->ip_ttl);
@@ -1336,11 +1509,28 @@ traceroute_main(int argc, char *argv[])
 			if (cc == 0)
 				printf(" *");
 			(void)fflush(stdout);
-		}
 		putchar('\n');
-		if (got_there ||
-		    (unreachable > 0 && unreachable >= nprobes - 1))
-			break;
 	}
+
+	if (ttl_set_str != NULL)
+	{
+		if (0 != interval)	
+		{
+			/* According spec 2.0,U = 0.9*(E*8)*19/T bps.
+			 * count should be 19 instead of 20
+			 * */
+			count--;
+			bandwidth = (count*packlen*8*9)/(10*interval);
+			printf("Uplink bandwith is %.0f Kbps\n", bandwidth);	
+		}	
+		FILE *tmp_file;	
+		if (tmp_file = fopen("/tmp/detec_uprate", "w+")) 
+		{		
+			fprintf(tmp_file, "%.0f", bandwidth);		
+			close(tmp_file);	
+		}
+	}
+#endif
+
 	return 0;
 }

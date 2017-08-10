@@ -83,6 +83,7 @@ int read_interface(char *interface, int *ifindex, uint32_t *addr, uint8_t *arp)
 		DEBUG("adapter hardware address %02x:%02x:%02x:%02x:%02x:%02x",
 			arp[0], arp[1], arp[2], arp[3], arp[4], arp[5]);
 	}
+	close(fd);
 
 	return 0;
 }

@@ -26,6 +26,7 @@
 #include <net/if.h>
 #include <net/if_arp.h>
 
+#include <asm/byteorder.h>
 #include <asm/types.h>
 #ifndef __constant_htons
 #define __constant_htons htons

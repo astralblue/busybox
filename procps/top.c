@@ -41,6 +41,7 @@ typedef struct {
 	unsigned uid;
 	char state[4];
 	char comm[COMM_LEN];
+	long nice;
 } top_status_t;
 static top_status_t *top;
 static int ntop;
@@ -297,14 +298,14 @@ static void display_status(int count, int scr_width)
 
 	/* what info of the processes is shown */
 	printf(OPT_BATCH_MODE ? "%.*s" : "\e[7m%.*s\e[0m", scr_width,
-		"  PID USER     STATUS   RSS  PPID %CPU %MEM COMMAND");
+		"  PID USER     STATUS   NI   RSS  PPID %CPU %MEM COMMAND");
 #define MIN_WIDTH \
-	sizeof( "  PID USER     STATUS   RSS  PPID %CPU %MEM C")
+	sizeof( "  PID USER     STATUS   NI   RSS  PPID %CPU %MEM C")
 #else
 	printf(OPT_BATCH_MODE ? "%.*s" : "\e[7m%.*s\e[0m", scr_width,
-		"  PID USER     STATUS   RSS  PPID %MEM COMMAND");
+		"  PID USER     STATUS   NI   RSS  PPID %MEM COMMAND");
 #define MIN_WIDTH \
-	sizeof( "  PID USER     STATUS   RSS  PPID %MEM C")
+	sizeof( "  PID USER     STATUS   NI   RSS  PPID %MEM C")
 #endif
 
 	/*
@@ -357,11 +358,11 @@ static void display_status(int count, int scr_width)
 		USE_FEATURE_TOP_CPU_USAGE_PERCENTAGE(
 		pcpu = div((s->pcpu*pcpu_scale) >> pcpu_shift, 10);
 		)
-		col -= printf("\n%5u %-8s %s  "
+		col -= printf("\n%5u %-8s %s  %5ld"
 				"%s%6u"
 				USE_FEATURE_TOP_CPU_USAGE_PERCENTAGE("%3u.%c")
 				"%3u.%c ",
-				s->pid, get_cached_username(s->uid), s->state,
+				s->pid, get_cached_username(s->uid), s->state, s->nice,
 				rss_str_buf, s->ppid,
 				USE_FEATURE_TOP_CPU_USAGE_PERCENTAGE(pcpu.quot, '0'+pcpu.rem,)
 				pmem.quot, '0'+pmem.rem);
@@ -459,7 +460,7 @@ int top_main(int argc, char **argv)
 
 		/* Default to 25 lines - 5 lines for status */
 		lines = 24 - 3;
-		col = 79;
+		col = 84;
 #if ENABLE_FEATURE_USE_TERMIOS
 		get_terminal_width_height(0, &col, &lines);
 		if (lines < 5 || col < MIN_WIDTH) {
@@ -480,12 +481,14 @@ int top_main(int argc, char **argv)
 				| PSSCAN_COMM
 				| PSSCAN_SID
 				| PSSCAN_UIDGID
+				| PSSCAN_NI
 		))) {
 			int n = ntop;
 			top = xrealloc(top, (++ntop)*sizeof(top_status_t));
 			top[n].pid = p->pid;
 			top[n].ppid = p->ppid;
 			top[n].rss = p->rss;
+			top[n].nice = p->nice;
 #if ENABLE_FEATURE_TOP_CPU_USAGE_PERCENTAGE
 			top[n].ticks = p->stime + p->utime;
 #endif

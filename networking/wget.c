@@ -46,6 +46,11 @@ enum {
 static void progressmeter(int flag) {}
 #endif
 
+static void deal_timeout();		/* deal with downloading files timeout */
+static int quiet;	/* if wget in quiet mode */
+static unsigned wget_MaxTime;
+static unsigned time_counter;
+
 /* Read NMEMB elements of SIZE bytes into PTR from STREAM.  Returns the
  * number of elements read, and a short count if an eof or non-interrupt
  * error is encountered.  */
@@ -86,6 +91,22 @@ static char *base64enc(unsigned char *p, char *buf, int len)
 }
 #endif
 
+static void deal_timeout()
+{
+	if(++time_counter > wget_MaxTime)
+	{
+		if(quiet)
+			progressmeter(1);
+	
+		alarm(0);
+		bb_error_msg_and_die("download time out.");
+	}
+
+	progressmeter(0);
+	
+	alarm(1);
+}
+
 int wget_main(int argc, char **argv)
 {
 	char buf[512];
@@ -98,6 +119,7 @@ int wget_main(int argc, char **argv)
 	char *s;
 	char *proxy = 0;
 	char *dir_prefix = NULL;
+	char *timeout = NULL;
 #if ENABLE_FEATURE_WGET_LONG_OPTIONS
 	char *extra_headers = NULL;
 	llist_t *headers_llist = NULL;
@@ -126,6 +148,7 @@ int wget_main(int argc, char **argv)
 		WGET_OPT_USER_AGENT = 0x20,
 		WGET_OPT_PASSIVE    = 0x40,
 		WGET_OPT_HEADER     = 0x80,
+		WGET_OPT_TIMEOUT    = 0x100, 
 	};
 #if ENABLE_FEATURE_WGET_LONG_OPTIONS
 	static const struct option wget_long_options[] = {
@@ -136,16 +159,17 @@ int wget_main(int argc, char **argv)
 		{ "directory-prefix", required_argument, NULL, 'P' },
 		{ "proxy",            required_argument, NULL, 'Y' },
 		{ "user-agent",       required_argument, NULL, 'U' },
-		{ "passive-ftp",      no_argument, NULL, 0xff },
+		{ "passive-ftp",      no_argument, NULL, 0xfd },
 		{ "header",           required_argument, NULL, 0xfe },
+		{ "timeout",          required_argument, NULL, 'T'},
 		{ 0, 0, 0, 0 }
 	};
 	applet_long_options = wget_long_options;
 #endif
 	opt_complementary = "-1" USE_FEATURE_WGET_LONG_OPTIONS(":\xfe::");
-	opt = getopt32(argc, argv, "cqO:P:Y:U:",
+	opt = getopt32(argc, argv, "cqO:P:Y:U:T:",
 				&fname_out, &dir_prefix,
-				&proxy_flag, &user_agent
+				&proxy_flag, &user_agent, &timeout
 				USE_FEATURE_WGET_LONG_OPTIONS(, &headers_llist)
 				);
 	if (strcmp(proxy_flag, "off") == 0) {
@@ -168,6 +192,38 @@ int wget_main(int argc, char **argv)
 		}
 	}
 #endif
+
+	wget_MaxTime = atoi(timeout);
+	time_counter = 0;
+
+	if(timeout != NULL)
+	{
+		char *timeout_para = timeout;
+
+		if(wget_MaxTime <= 0)
+			bb_error_msg_and_die("not a correct time value: %s", timeout);
+
+		while(*timeout_para != '\0')
+		{
+			if(*timeout_para<'0' || *timeout_para>'9')
+			{
+				bb_error_msg_and_die("not a correct time value: %s", timeout);
+			}
+
+			timeout_para++;
+		}
+
+		if (opt & WGET_OPT_QUIET)
+			quiet = 1;
+		else
+			quiet = 0;
+	}
+	
+	//setup timer before downloading file
+	if(signal(SIGALRM, deal_timeout) == SIG_ERR)
+		bb_error_msg_and_die("can not catch SIGALRM");
+
+	alarm(1);
 
 	parse_url(argv[optind], &target);
 	server.host = target.host;
@@ -445,7 +501,6 @@ int wget_main(int argc, char **argv)
 			bb_error_msg_and_die("bad response to RETR: %s", buf);
 	}
 
-
 	/*
 	 * Retrieve file
 	 */
@@ -462,6 +517,12 @@ int wget_main(int argc, char **argv)
 
 	if (!(opt & WGET_OPT_QUIET))
 		progressmeter(-1);
+	
+	//start time counter again during file downloading
+	if(signal(SIGALRM, deal_timeout) == SIG_ERR)
+		bb_error_msg_and_die("can not catch SIGALRM");
+
+	alarm(1);
 
 	do {
 		while (content_len > 0 || !got_clen) {

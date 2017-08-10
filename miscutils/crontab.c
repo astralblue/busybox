@@ -13,7 +13,7 @@
 #include "busybox.h"
 
 #ifndef CRONTABS
-#define CRONTABS        "/var/spool/cron/crontabs"
+#define CRONTABS        "/etc/crontabs"
 #endif
 #ifndef TMPDIR
 #define TMPDIR          "/var/spool/cron"

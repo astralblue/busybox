@@ -3957,12 +3957,6 @@ find_command(char *name, struct cmdentry *entry, int act, const char *path)
 	}
 #endif
 
-	if (is_safe_applet(name)) {
-		entry->cmdtype = CMDNORMAL;
-		entry->u.index = -1;
-		return;
-	}
-
 	updatetbl = (path == pathval());
 	if (!updatetbl) {
 		act |= DO_ALTPATH;
@@ -4072,6 +4066,12 @@ loop:
 		cmdp->param.index = idx;
 		INTON;
 		goto success;
+	}
+
+	if (is_safe_applet(name)) {
+		entry->cmdtype = CMDNORMAL;
+		entry->u.index = -1;
+		return;
 	}
 
 	/* We failed.  If there was an entry for this command, delete it */
@@ -12237,9 +12237,18 @@ exportcmd(int argc, char **argv)
 	const char *p;
 	char **aptr;
 	int flag = argv[0][0] == 'r'? VREADONLY : VEXPORT;
+	int mask = ~0;
 	int notp;
 
-	notp = nextopt("p") - 'p';
+	while ((notp = nextopt("np"))) {
+		if (notp == 'n') {
+				mask = ~flag;
+		} else { /* p */
+			break;
+		}
+	}
+
+	notp -= 'p';
 	if (notp && ((name = *(aptr = argptr)))) {
 		do {
 			if ((p = strchr(name, '=')) != NULL) {
@@ -12247,10 +12256,11 @@ exportcmd(int argc, char **argv)
 			} else {
 				if ((vp = *findvar(hashvar(name), name))) {
 					vp->flags |= flag;
+					vp->flags &= mask;
 					continue;
 				}
 			}
-			setvar(name, p, flag);
+			setvar(name, p, flag & mask);
 		} while ((name = *++aptr) != NULL);
 	} else {
 		showvars(argv[0], flag, 0);

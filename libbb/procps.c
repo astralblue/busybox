@@ -105,7 +105,6 @@ procps_status_t* procps_scan(procps_status_t* sp, int flags)
 	char buf[PROCPS_BUFSIZE];
 	char filename[sizeof("/proc//cmdline") + sizeof(int)*3];
 	char *filename_tail;
-	long tasknice;
 	unsigned pid;
 	int n;
 	struct stat sb;
@@ -169,7 +168,7 @@ procps_status_t* procps_scan(procps_status_t* sp, int flags)
 				sp->state, &sp->ppid,
 				&sp->pgid, &sp->sid,
 				&sp->utime, &sp->stime,
-				&tasknice,
+				&sp->nice,
 				&sp->rss);
 			if (n != 8)
 				break;
@@ -178,9 +177,9 @@ procps_status_t* procps_scan(procps_status_t* sp, int flags)
 				sp->state[1] = 'W';
 			else
 				sp->state[1] = ' ';
-			if (tasknice < 0)
+			if (sp->nice < 0)
 				sp->state[2] = '<';
-			else if (tasknice > 0)
+			else if (sp->nice > 0)
 				sp->state[2] = 'N';
 			else
 				sp->state[2] = ' ';

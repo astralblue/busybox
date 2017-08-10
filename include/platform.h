@@ -128,8 +128,10 @@
 # include <netinet/in.h>
 #endif
 
+#ifndef __APPLE__
 #ifndef __socklen_t_defined
 typedef int socklen_t;
+#endif
 #endif
 
 /* ---- Compiler dependent settings ------------------------- */
@@ -161,7 +163,7 @@ typedef int socklen_t;
 #define HAVE_STDINT_H
 #else
 /* Largest integral types.  */
-#if __BIG_ENDIAN__
+#if __BIG_ENDIAN__ && !__APPLE__
 typedef long int                intmax_t;
 typedef unsigned long int       uintmax_t;
 #else

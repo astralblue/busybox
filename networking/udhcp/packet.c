@@ -107,6 +107,10 @@ uint16_t udhcp_checksum(void *addr, int count)
 	return ~sum;
 }
 
+int udhcp_get_payload_len(struct dhcpMessage *payload)
+{
+	return sizeof(struct dhcpMessage) - MAX_OPTIONS_LEN + end_option(payload->options) + sizeof(payload->options[0]);
+}
 
 /* Construct a ip/udp header for a packet, and specify the source and dest hardware address */
 void BUG_sizeof_struct_udp_dhcp_packet_must_be_576(void);
@@ -118,6 +122,7 @@ int udhcp_raw_packet(struct dhcpMessage *payload,
 	int result;
 	struct sockaddr_ll dest;
 	struct udp_dhcp_packet packet;
+	int p_len = udhcp_get_payload_len(payload);
 
 	fd = socket(PF_PACKET, SOCK_DGRAM, htons(ETH_P_IP));
 	if (fd < 0) {
@@ -127,6 +132,7 @@ int udhcp_raw_packet(struct dhcpMessage *payload,
 
 	memset(&dest, 0, sizeof(dest));
 	memset(&packet, 0, sizeof(packet));
+	memcpy(&(packet.data), payload, p_len);
 
 	dest.sll_family = AF_PACKET;
 	dest.sll_protocol = htons(ETH_P_IP);
@@ -144,12 +150,13 @@ int udhcp_raw_packet(struct dhcpMessage *payload,
 	packet.ip.daddr = dest_ip;
 	packet.udp.source = htons(source_port);
 	packet.udp.dest = htons(dest_port);
-	packet.udp.len = htons(sizeof(packet.udp) + sizeof(struct dhcpMessage)); /* cheat on the psuedo-header */
+	p_len += sizeof(packet.udp);
+	packet.udp.len = htons(p_len);
 	packet.ip.tot_len = packet.udp.len;
-	memcpy(&(packet.data), payload, sizeof(struct dhcpMessage));
-	packet.udp.check = udhcp_checksum(&packet, sizeof(struct udp_dhcp_packet));
+	p_len += sizeof(packet.ip);
+	packet.udp.check = udhcp_checksum(&packet, p_len);
 
-	packet.ip.tot_len = htons(sizeof(struct udp_dhcp_packet));
+	packet.ip.tot_len = htons(p_len);
 	packet.ip.ihl = sizeof(packet.ip) >> 2;
 	packet.ip.version = IPVERSION;
 	packet.ip.ttl = IPDEFTTL;
@@ -158,7 +165,7 @@ int udhcp_raw_packet(struct dhcpMessage *payload,
 	if (sizeof(struct udp_dhcp_packet) != 576)
 		BUG_sizeof_struct_udp_dhcp_packet_must_be_576();
 
-	result = sendto(fd, &packet, sizeof(struct udp_dhcp_packet), 0,
+	result = sendto(fd, &packet, p_len, 0,
 			(struct sockaddr *) &dest, sizeof(dest));
 	if (result <= 0) {
 		bb_perror_msg("sendto");
@@ -205,7 +212,7 @@ int udhcp_kernel_packet(struct dhcpMessage *payload,
 		return -1;
 	}
 
-	result = write(fd, payload, sizeof(struct dhcpMessage));
+	result = write(fd, payload, udhcp_get_payload_len(payload));
 	close(fd);
 	return result;
 }

@@ -22,6 +22,8 @@
 #include <netinet/udp.h>
 #include <netinet/ip.h>
 
+#define MAX_OPTIONS_LEN  308
+
 struct dhcpMessage {
 	uint8_t op;
 	uint8_t htype;
@@ -38,7 +40,7 @@ struct dhcpMessage {
 	uint8_t sname[64];
 	uint8_t file[128];
 	uint32_t cookie;
-	uint8_t options[308]; /* 312 - cookie */
+	uint8_t options[MAX_OPTIONS_LEN]; /* 312 - cookie */
 };
 
 struct udp_dhcp_packet {

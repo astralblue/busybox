@@ -44,6 +44,27 @@ static void maybe_set_utc(int opt)
 		xputenv("TZ=UTC0");
 }
 
+static char * get_time_zone()
+{
+#define TIME_ZONE_FILE "/tmp/time_zone"
+	int  i = 0;
+	char buf[256];
+	FILE *fp;
+
+	buf[0] = '\0';
+	if (!(fp = fopen(TIME_ZONE_FILE, "r")))
+		return buf;
+	fgets(buf, sizeof(buf), fp);
+	fclose(fp);
+
+	i = 0;
+	while (buf[i] != '\0' && buf[i] != '\r' && buf[i] != '\n')
+		i++;
+	buf[i] = '\0';
+
+	return buf;
+}
+
 int date_main(int argc, char **argv)
 {
 	time_t tm;
@@ -53,6 +74,7 @@ int date_main(int argc, char **argv)
 	char *date_str = NULL;
 	char *date_fmt = NULL;
 	char *filename = NULL;
+	char *time_zone = NULL;
 	char *isofmt_arg;
 	char *hintfmt_arg;
 
@@ -97,6 +119,12 @@ int date_main(int argc, char **argv)
 		tm = statbuf.st_mtime;
 	} else
 		time(&tm);
+	/* Get local time value according to time zone setting */
+	time_zone = get_time_zone();
+	if (*time_zone != '\0') {
+		time(&tm);
+		setenv("TZ", time_zone, 1);
+	}
 	memcpy(&tm_time, localtime(&tm), sizeof(tm_time));
 	/* Zero out fields - take her back to midnight! */
 	if (date_str != NULL) {

@@ -12,6 +12,13 @@ config AWK
 	  Awk is used as a pattern scanning and processing language.  This is
 	  the BusyBox implementation of that programming language.
 
+config AWX
+	bool "Enable awx (awk web extension)"
+	default n
+	depends on AWK
+	help
+	  awx - awk web extension
+
 config FEATURE_AWK_MATH
 	bool "Enable math functions (requires libm)"
 	default y

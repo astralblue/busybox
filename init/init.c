@@ -162,6 +162,19 @@ static int waitfor(const struct init_action *a, pid_t pid);
 static void shutdown_signal(int sig);
 #endif
 
+/*bug 11758*/
+#define DNI_PHY_STATUS_DISPLAY 1
+#if DNI_PHY_STATUS_DISPLAY
+#define SIG_PHY         29
+void sig_phy_rst(int sig);
+#endif
+
+#define DNI_SNED_EMAIL_ALERT	1
+#if DNI_SNED_EMAIL_ALERT
+#define SIG_EMAIL_ALERT 30 /* The same as:  SIGXCPU 30  CPU limit exceeded (4.2 BSD).  */
+void sig_email_alert(int sig);
+#endif
+
 #if !ENABLE_DEBUG_INIT
 static void loop_forever(void)
 {
@@ -636,6 +649,11 @@ static void shutdown_system(void)
 {
 	sigset_t block_signals;
 
+    //some progresses block pppd to send the package.But if put kill pppd here,it will send.
+	system("killall pppd");
+    //acld can not run config_commit success when reboot.But if put kill acld here,it can run success.
+	system("killall acld");
+	sleep(1);
 	/* run everything to be run at "shutdown".  This is done _prior_
 	 * to killing everything, in case people wish to use scripts to
 	 * shut things down gracefully... */
@@ -664,7 +682,7 @@ static void shutdown_system(void)
 	/* Send signals to every process _except_ pid 1 */
 	message(CONSOLE | LOG, init_sending_format, "TERM");
 	kill(-1, SIGTERM);
-	sleep(1);
+	sleep(2);
 	sync();
 
 	message(CONSOLE | LOG, init_sending_format, "KILL");
@@ -969,6 +987,78 @@ static void reload_signal(int sig ATTRIBUTE_UNUSED)
 }
 #endif  /* FEATURE_USE_INITTAB */
 
+#if DNI_PHY_STATUS_DISPLAY
+void sig_phy_rst(int sig)
+{
+	        system("/usr/bin/detcable");
+}
+#endif
+
+#if DNI_SNED_EMAIL_ALERT
+void sig_email_alert(int sig)
+{
+	system("/etc/email/send_email_alert");
+}
+#endif
+
+#define DNI_RESET_BUTTON	1
+
+#if DNI_RESET_BUTTON
+
+#define RESET2DEF_TIMEVAL	5	/* >= 5 seconds, Reseting to Default ... */
+
+static int gpio_fd = -1;
+
+static long uptime(void)
+{
+	struct sysinfo info;
+
+	sysinfo(&info);
+
+	return info.uptime;
+}
+
+static void reset_action(int sig)
+{
+	char action;
+	static long down_time;
+	static long press_down = 0;
+
+	if (gpio_fd < 0)
+		return;
+
+	if (read(gpio_fd, &action, sizeof(action)) != sizeof(action)) {
+		printf("Read Reset Button GPIO value error!\n");
+		return;
+	}
+
+	if (action == '0') {
+		down_time = uptime();
+		press_down = 1;
+		system("/bin/echo \"Reset-Button is Pressed...\" > /dev/console");
+	} else if(action == '1') {
+		if (press_down == 0) {
+			printf("NOT Found the Press Down action!\n");
+			return;
+		}
+
+		close(gpio_fd);
+		gpio_fd = -1;
+
+		system("/bin/echo \"Reset-Button is Released!!!\" > /dev/console");
+		system("/sbin/ledcontrol -n power -c amber -s off");
+		if ((uptime() - down_time) >= RESET2DEF_TIMEVAL) {
+			system("/bin/echo \"Resetting to Default...\" > /dev/console");
+			system("/bin/config default");
+			system("/bin/echo \"Done!!!\" > /dev/console");
+		}
+
+		system("/sbin/reboot");
+	}
+}
+
+#endif
+
 int init_main(int argc, char **argv)
 {
 	struct init_action *a;
@@ -1001,6 +1091,14 @@ int init_main(int argc, char **argv)
 	/* Turn off rebooting via CTL-ALT-DEL -- we get a
 	 * SIGINT on CAD so we can shut things down gracefully... */
 	init_reboot(RB_DISABLE_CAD);
+#endif
+
+#if DNI_PHY_STATUS_DISPLAY
+	signal(SIG_PHY, sig_phy_rst);
+#endif
+
+#if DNI_SNED_EMAIL_ALERT
+	signal(SIG_EMAIL_ALERT, sig_email_alert);
 #endif
 
 	/* Figure out where the default console should be */
@@ -1099,6 +1197,23 @@ int init_main(int argc, char **argv)
 	signal(SIGHUP, SIG_IGN);
 #endif /* FEATURE_USE_INITTAB */
 
+#if DNI_RESET_BUTTON
+	gpio_fd = open("/dev/ar7100gpiointr", O_RDONLY | O_NONBLOCK);
+	if (gpio_fd >= 0)
+		signal(SIGUSR2, reset_action);
+	else
+		printf("Can't open GPIO device!\n");
+#endif
+
+	/*
+	 * [NETGEAR SPEC V1.6] 8.10.1 Power On/Reboot
+	 * 
+	 * The power LED stays AMBER during system is booting up after 
+	 * system powered on. It turns to GREEN and stays on after boot
+	 * up procedure finished.
+	 */
+	system("/bin/echo \"Boot up procedure is Finished!!!\" > /dev/console");
+	system("/sbin/ledcontrol -n power -c green -s on");	
 
 	/* Now run the looping stuff for the rest of forever */
 	while (1) {

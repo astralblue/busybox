@@ -273,6 +273,12 @@ int udhcpc_main(int argc, char *argv[])
 		tv.tv_sec = timeout - uptime();
 		tv.tv_usec = 0;
 
+		/* When running on a bridge, the ifindex may have changed (e.g. if
+		 * member interfaces were added/removed or if the status of the
+		 * bridge changed).
+		 * Workaround: refresh it here before processing the next packet */
+		read_interface(client_config.interface, &client_config.ifindex, NULL, client_config.arp);
+
 		if (listen_mode != LISTEN_NONE && fd < 0) {
 			if (listen_mode == LISTEN_KERNEL)
 				fd = listen_socket(INADDR_ANY, CLIENT_PORT, client_config.interface);
@@ -291,7 +297,7 @@ int udhcpc_main(int argc, char *argv[])
 			/* timeout dropped to zero */
 			switch (state) {
 			case INIT_SELECTING:
-				if (packet_num < client_config.retries) {
+				if (!client_config.retries || (packet_num < client_config.retries)) {
 					if (packet_num == 0)
 						xid = random_xid();
 
@@ -316,7 +322,7 @@ int udhcpc_main(int argc, char *argv[])
 				break;
 			case RENEW_REQUESTED:
 			case REQUESTING:
-				if (packet_num < client_config.retries) {
+				if (!client_config.retries || (packet_num < client_config.retries)) {
 					/* send request packet */
 					if (state == RENEW_REQUESTED)
 						send_renew(xid, server_addr, requested_ip); /* unicast */

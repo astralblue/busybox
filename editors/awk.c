@@ -30,6 +30,11 @@
 /* these flags are static, don't change them when value is changed */
 #define	VF_DONTTOUCH (VF_ARRAY | VF_SPECIAL | VF_WALK | VF_CHILD | VF_DIRTY)
 
+#ifdef CONFIG_AWX
+#define fputs(s, stream) fputs_hook(s, stream)
+static inline int fputs_hook (__const char *__restrict __s, FILE *__restrict __stream);
+#endif
+
 /* Variable */
 typedef struct var_s {
 	unsigned short type;		/* flags */
@@ -50,10 +55,15 @@ typedef struct chain_s {
 	char *programname;
 } chain;
 
+typedef var *(*awk_cfunc)(var *res, var *args, int nargs);
 /* Function */
 typedef struct func_s {
 	unsigned short nargs;
-	struct chain_s body;
+	enum { AWKFUNC, CFUNC } type;
+	union {
+		awk_cfunc cfunc;
+		struct chain_s body;
+	} x;
 } func;
 
 /* I/O stream */
@@ -1312,7 +1322,8 @@ static void parse_program(char *p)
 			next_token(TC_FUNCTION);
 			pos++;
 			f = newfunc(t.string);
-			f->body.first = NULL;
+			f->type = AWKFUNC;
+			f->x.body.first = NULL;
 			f->nargs = 0;
 			while (next_token(TC_VARIABLE | TC_SEQTERM) & TC_VARIABLE) {
 				v = findvar(ahash, t.string);
@@ -1321,7 +1332,7 @@ static void parse_program(char *p)
 				if (next_token(TC_COMMA | TC_SEQTERM) & TC_SEQTERM)
 					break;
 			}
-			seq = &(f->body);
+			seq = &(f->x.body);
 			chain_group();
 			clear_array(ahash);
 
@@ -2260,7 +2271,8 @@ static var *evaluate(node *op, var *res)
 			break;
 
 		case XC( OC_FUNC ):
-			if (! op->r.f->body.first)
+			if ((op->r.f->type == AWKFUNC) &&
+				!op->r.f->x.body.first)
 				runtime_error(EMSG_UNDEF_FUNC);
 
 			X.v = R.v = nvalloc(op->r.f->nargs+1);
@@ -2277,7 +2289,11 @@ static var *evaluate(node *op, var *res)
 			fnargs = X.v;
 
 			L.s = programname;
-			res = evaluate(op->r.f->body.first, res);
+			if (op->r.f->type == AWKFUNC)
+				res = evaluate(op->r.f->x.body.first, res);
+			else if (op->r.f->type == CFUNC)
+				res = op->r.f->x.cfunc(res, fnargs, op->r.f->nargs);
+
 			programname = L.s;
 
 			nvfree(fnargs);
@@ -2637,16 +2653,20 @@ static rstream *next_input_file(void)
 	return &rsm;
 }
 
+#ifdef CONFIG_AWX
+static int is_awx = 0;
+#include "awx.c"
+#endif
+
 int awk_main(int argc, char **argv)
 {
-	unsigned opt;
-	char *opt_F, *opt_v, *opt_W;
 	int i, j, flen;
 	var *v;
 	var tv;
 	char **envp;
 	char *vnames = (char *)vNames; /* cheat */
 	char *vvalues = (char *)vValues;
+	int c;
 
 	/* Undo busybox.c, or else strtod may eat ','! This breaks parsing:
 	 * $1,$2 == '$1,' '$2', NOT '$1' ',' '$2' */
@@ -2694,40 +2714,60 @@ int awk_main(int argc, char **argv)
 		free(s);
 	}
 
-	opt = getopt32(argc, argv, "F:v:f:W:", &opt_F, &opt_v, &programname, &opt_W);
-	argv += optind;
-	argc -= optind;
-	if (opt & 0x1) setvar_s(V[FS], opt_F); // -F
-	if (opt & 0x2) if (!is_assignment(opt_v)) bb_show_usage(); // -v
-	if (opt & 0x4) { // -f
-		char *s = s; /* die, gcc, die */
-		FILE *from_file = afopen(programname, "r");
-		/* one byte is reserved for some trick in next_token */
-		if (fseek(from_file, 0, SEEK_END) == 0) {
-			flen = ftell(from_file);
-			s = xmalloc(flen + 4);
-			fseek(from_file, 0, SEEK_SET);
-			i = 1 + fread(s + 1, 1, flen, from_file);
-		} else {
-			for (i = j = 1; j > 0; i += j) {
-				s = xrealloc(s, i + 4096);
-				j = fread(s + i, 1, 4094, from_file);
+#ifdef CONFIG_AWX
+	do_awx(argc, argv);
+#endif
+
+	programname = NULL;
+	while((c = getopt(argc, argv, "F:v:f:W:")) != EOF) {
+		switch (c) {
+			case 'F':
+				setvar_s(V[FS], optarg);
+				break;
+			case 'v':
+				if (! is_assignment(optarg))
+					bb_show_usage();
+				break;
+			case 'f': {
+				FILE *F = afopen(programname = optarg, "r");
+				char *s = NULL;
+				/* one byte is reserved for some trick in next_token */
+				if (fseek(F, 0, SEEK_END) == 0) {
+					flen = ftell(F);
+					s = (char *)xmalloc(flen+4);
+					fseek(F, 0, SEEK_SET);
+					i = 1 + fread(s+1, 1, flen, F);
+				} else {
+					for (i=j=1; j>0; i+=j) {
+						s = (char *)xrealloc(s, i+4096);
+						j = fread(s+i, 1, 4094, F);
+					}
+				}
+				s[i] = '\0';
+				fclose(F);
+				parse_program(s+1);
+				free(s);
+				break;
 			}
+			case 'W':
+				bb_error_msg("Warning: unrecognized option '-W %s' ignored\n", optarg);
+				break;
+
+			default:
+				bb_show_usage();
 		}
-		s[i] = '\0';
-		fclose(from_file);
-		parse_program(s + 1);
-		free(s);
-	} else { // no -f: take program from 1st parameter
+	}
+	argc -= optind;
+	argv += optind;
+
+	if (!programname) {
 		if (!argc)
 			bb_show_usage();
 		programname = "cmd. line";
 		parse_program(*argv++);
 		argc--;
 	}
-	if (opt & 0x8) // -W
-		bb_error_msg("warning: unrecognized option '-W %s' ignored", opt_W);
-
+	
 	/* fill in ARGV array */
 	setvar_i(V[ARGC], argc + 1);
 	setari_u(V[ARGV], 0, "awk");

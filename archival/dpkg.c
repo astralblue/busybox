@@ -1463,6 +1463,10 @@ static char *deb_extract_control_file_to_buffer(archive_handle_t *ar_handle, lli
 	return ar_handle->sub_archive->buffer;
 }
 
+/*
+
+// moved to data_extract_all.c
+
 static void data_extract_all_prefix(archive_handle_t *archive_handle)
 {
 	char *name_ptr = archive_handle->file_header->name;
@@ -1474,6 +1478,8 @@ static void data_extract_all_prefix(archive_handle_t *archive_handle)
 	}
 	return;
 }
+
+*/
 
 static void unpack_package(deb_file_t *deb_file)
 {

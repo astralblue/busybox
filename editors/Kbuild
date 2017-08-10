@@ -10,3 +10,12 @@ lib-$(CONFIG_ED)        += ed.o
 lib-$(CONFIG_PATCH)     += patch.o
 lib-$(CONFIG_SED)       += sed.o
 lib-$(CONFIG_VI)        += vi.o
+lib-$(CONFIG_AWX)		+= awx_parser.o
+
+editors/awx_parser.c: editors/awx_parser.l editors/awx_parser.h
+	@flex $<
+	@mv lex.yy.c $@
+
+editors/awx_parser.o: editors/awx_parser.c FORCE
+	$(call cmd,force_checksrc)
+	$(call if_changed_rule,cc_o_c)

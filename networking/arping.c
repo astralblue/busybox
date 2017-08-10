@@ -258,8 +258,8 @@ int arping_main(int argc, char **argv)
 		 * Advert also sets unsolicited.
 		 */
 		opt_complementary = "Df:AU";
-		opt = getopt32(argc, argv, "DUAqfbc:w:i:s:",
-					&_count, &_timeout, &device, &source);
+		opt = getopt32(argc, argv, "DUAqfbc:w:i:I:s:",
+					&_count, &_timeout, &device, &device, &source);
 		cfg |= opt & 0x3f; /* set respective flags */
 		if (opt & 0x40) /* -c: count */
 			count = xatou(_count);

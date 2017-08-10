@@ -42,6 +42,23 @@ config FEATURE_REMOTE_LOG
 	  measure to prevent system logs from being tampered with
 	  by an intruder.
 
+config FEATURE_TIMEZONE_LOG
+	bool "TimeZone Log support"
+	default n
+	depends on SYSLOGD
+	help
+	  When you enable this feature, the syslogd utility can
+	  stamp each log message by the time with TimeZone
+
+config FEATURE_VENDOR_FORMAT_LOG
+	bool "Specific Vendor Required Format Log"
+	default n
+	depends on SYSLOGD
+	help
+	  When you enable this feature, the syslogd utility can
+	  format the log message according the user requred, just
+	  like NETGEAR
+
 config FEATURE_IPC_SYSLOG
 	bool "Circular Buffer support"
 	default n

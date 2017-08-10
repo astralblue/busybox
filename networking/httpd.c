@@ -102,6 +102,7 @@ static const char httpdVersion[] = "busybox httpd/1.35 6-Oct-2004";
 static const char default_path_httpd_conf[] = "/etc";
 static const char httpd_conf[] = "httpd.conf";
 static const char home[] = "./";
+static const char *home_httpd = home;
 
 #define TIMEOUT 60
 
@@ -137,8 +138,11 @@ typedef struct {
 	const char *query;
 
 	USE_FEATURE_HTTPD_CGI(char *referer;)
+	USE_FEATURE_HTTPD_CGI(char *user_agent;)
 
 	const char *configFile;
+	const char *redirectPath;
+	const char *redirectHost;
 
 	unsigned int rmt_ip;
 #if ENABLE_FEATURE_HTTPD_CGI || DEBUG
@@ -879,8 +883,11 @@ static int sendHeaders(HttpResponseNum responseNum)
 	}
 #endif
 	if (responseNum == HTTP_MOVED_TEMPORARILY) {
-		len += sprintf(buf+len, "Location: %s/%s%s\r\n",
+		len += sprintf(buf+len, "Location: %s%s%s%s%s%s\r\n",
+				(config->redirectHost ? "http://" : ""),
+				(config->redirectHost ? config->redirectHost : ""),
 				config->found_moved_temporarily,
+				(config->redirectHost ? "" : "/"),
 				(config->query ? "?" : ""),
 				(config->query ? config->query : ""));
 	}
@@ -1066,6 +1073,7 @@ static int sendCgi(const char *url,
 			if (cp) *cp = '\0'; /* delete :PORT */
 			setenv1("REMOTE_ADDR", p);
 		}
+ 		setenv1("HTTP_USER_AGENT", config->user_agent);
 #if ENABLE_FEATURE_HTTPD_SET_REMOTE_PORT_TO_ENV
 		setenv_long("REMOTE_PORT", config->port);
 #endif
@@ -1211,9 +1219,10 @@ static int sendCgi(const char *url,
 #if PIPESIZE >= MAX_MEMORY_BUFF
 # error "PIPESIZE >= MAX_MEMORY_BUFF"
 #endif
-			/* NB: was safe_read. If it *has to be* safe_read, */
-			/* please explain why in this comment... */
-			count = full_read(inFd, rbuf, PIPESIZE);
+			/* reverted back to safe_read, otherwise httpd may block if the */
+			/* cgi-script outputs page date before it has fully received all */
+			/* (eg POST) data */
+			count = safe_read(inFd, rbuf, PIPESIZE);
 			if (count == 0)
 				break;  /* closed */
 			if (count < 0)
@@ -1224,7 +1233,7 @@ static int sendCgi(const char *url,
 				 * "chopped up into small chunks" syndrome here */
 				rbuf[count] = '\0';
 				/* check to see if the user script added headers */
-#define HTTP_200 "HTTP/1.0 200 OK\r\n\r\n"
+#define HTTP_200 "HTTP/1.0 200 OK\r\n"
 				if (memcmp(rbuf, HTTP_200, 4) != 0) {
 					/* there is no "HTTP", do it ourself */
 					full_write(s, HTTP_200, sizeof(HTTP_200)-1);
@@ -1235,9 +1244,9 @@ static int sendCgi(const char *url,
 				 * echo -en "Location: http://www.busybox.net\r\n"
 				 * echo -en "\r\n"
 				 */
-				//if (!strstr(rbuf, "ontent-")) {
-				//	full_write(s, "Content-type: text/plain\r\n\r\n", 28);
-				//}
+				if (!strstr(rbuf, "ontent-")) {
+					full_write(s, "Content-type: text/plain\r\n\r\n", 28);
+				}
 				firstLine = 0;
 			}
 			if (full_write(s, rbuf, count) != count)
@@ -1402,12 +1411,26 @@ static int checkPerm(const char *path, const char *request)
 			if (ENABLE_FEATURE_HTTPD_AUTH_MD5) {
 				char *cipher;
 				char *pp;
+				char *ppnew = NULL;
+				struct passwd *pwd = NULL;
 
 				if (strncmp(p, request, u-request) != 0) {
 					/* user uncompared */
 					continue;
 				}
 				pp = strchr(p, ':');
+				if(pp && pp[1] == '$' && pp[2] == 'p' &&
+						 pp[3] == '$' && pp[4] &&
+					 (pwd = getpwnam(&pp[4])) != NULL) {
+					if(pwd->pw_passwd && pwd->pw_passwd[0] == '!') {
+						prev = NULL;
+						continue;
+					}
+					ppnew = xrealloc(ppnew, 5 + strlen(pwd->pw_passwd));
+					ppnew[0] = ':';
+					strcpy(ppnew + 1, pwd->pw_passwd);
+					pp = ppnew;
+				}
 				if (pp && pp[1] == '$' && pp[2] == '1' &&
 						pp[3] == '$' && pp[4]) {
 					pp++;
@@ -1416,6 +1439,10 @@ static int checkPerm(const char *path, const char *request)
 						goto set_remoteuser_var;   /* Ok */
 					/* unauthorized */
 					continue;
+				}
+				if (ppnew) {
+					free(ppnew);
+					ppnew = NULL;
 				}
 			}
 
@@ -1479,6 +1506,8 @@ static void handleIncoming(void)
 #if ENABLE_FEATURE_HTTPD_BASIC_AUTH
 	int credentials = -1;  /* if not required this is Ok */
 #endif
+	
+	xchdir(home_httpd);
 
 	sa.sa_handler = handle_sigalrm;
 	sigemptyset(&sa.sa_mask);
@@ -1574,8 +1603,12 @@ static void handleIncoming(void)
 		*++purl = '\0';       /* so keep last character */
 		test = purl;          /* end ptr */
 
+		/* redirect active */
+		if (config->redirectPath && (strncmp(url, config->redirectPath, strlen(config->redirectPath)) != 0))
+			config->found_moved_temporarily = config->redirectPath;
+
 		/* If URL is directory, adding '/' */
-		if (test[-1] != '/') {
+		if(!config->redirectPath && (test[-1] != '/')) {
 			if (is_directory(url + 1, 1, &sb)) {
 				config->found_moved_temporarily = url;
 			}
@@ -1629,6 +1662,8 @@ static void handleIncoming(void)
 					content_type = strdup(skip_whitespace(buf + sizeof("Content-Type:")-1));
 				} else if ((STRNCASECMP(buf, "Referer:") == 0)) {
 					config->referer = strdup(skip_whitespace(buf + sizeof("Referer:")-1));
+				} else if ((STRNCASECMP(buf, "User-Agent:") == 0)) {
+					config->user_agent = strdup(skip_whitespace(buf + sizeof("User-Agent:")-1));
 				}
 #endif
 
@@ -1680,8 +1715,8 @@ static void handleIncoming(void)
 		test = url + 1;      /* skip first '/' */
 
 #if ENABLE_FEATURE_HTTPD_CGI
-		if (strncmp(test, "cgi-bin", 7) == 0) {
-			if (test[7] == '/' && test[8] == 0)
+		if (strncmp(test, "cgi-bin/", 8) == 0) {
+			if (test[8] == 0)
 				goto FORBIDDEN;     /* protect listing cgi-bin/ */
 			sendCgi(url, prequest, length, cookie, content_type);
 			break;
@@ -1875,7 +1910,9 @@ static void sighup_handler(int sig)
 #endif
 
 enum {
-	c_opt_config_file = 0,
+	R_opt_redirect_path = 0,
+	H_opt_redirect_host,
+	c_opt_config_file,
 	d_opt_decode_url,
 	h_opt_home_httpd,
 	USE_FEATURE_HTTPD_ENCODE_URL_STR(e_opt_encode_url,)
@@ -1897,7 +1934,7 @@ enum {
 	OPT_FOREGROUND  = 1 << p_opt_foreground,
 };
 
-static const char httpd_opts[] = "c:d:h:"
+static const char httpd_opts[] = "R:H:c:d:h:"
 	USE_FEATURE_HTTPD_ENCODE_URL_STR("e:")
 	USE_FEATURE_HTTPD_BASIC_AUTH("r:")
 	USE_FEATURE_HTTPD_AUTH_MD5("m:")
@@ -1908,7 +1945,6 @@ static const char httpd_opts[] = "c:d:h:"
 int httpd_main(int argc, char *argv[])
 {
 	unsigned opt;
-	const char *home_httpd = home;
 	char *url_for_decode;
 	USE_FEATURE_HTTPD_ENCODE_URL_STR(const char *url_for_encode;)
 	const char *s_port;
@@ -1929,6 +1965,7 @@ int httpd_main(int argc, char *argv[])
 	config->ContentLength = -1;
 
 	opt = getopt32(argc, argv, httpd_opts,
+			&(config->redirectPath), &(config->redirectHost),
 			&(config->configFile), &url_for_decode, &home_httpd
 			USE_FEATURE_HTTPD_ENCODE_URL_STR(, &url_for_encode)
 			USE_FEATURE_HTTPD_BASIC_AUTH(, &(config->realm))

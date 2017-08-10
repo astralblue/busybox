@@ -1054,6 +1054,9 @@ static void ife_print(struct interface *ptr)
 	if (hf == ARPHRD_CSLIP || hf == ARPHRD_CSLIP6)
 		can_compress = 1;
 
+	if (hf == ARPHRD_IEEE80211)
+		hf = ARPHRD_ETHER;
+
 	hw = get_hwntype(hf);
 	if (hw == NULL)
 		hw = get_hwntype(-1);

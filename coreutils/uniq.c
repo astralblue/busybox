@@ -83,6 +83,8 @@ int uniq_main(int argc, char **argv)
 
 			if (!s0 || strcmp(e0, e1)) {
 				break;
+			} else {
+				free(s1);
 			}
 
 			++dups;		 /* Note: Testing for overflow seems excessive. */

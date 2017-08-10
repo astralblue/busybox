@@ -60,11 +60,11 @@ static void multiconvert(char *arg, void *result, converter convert)
 
 static void conv_strtoul(char *arg, void *result)
 {
-	*(unsigned long*)result = bb_strtoul(arg, NULL, 10);
+	*(unsigned long*)result = bb_strtoul(arg, NULL, 0);
 }
 static void conv_strtol(char *arg, void *result)
 {
-	*(long*)result = bb_strtol(arg, NULL, 10);
+	*(long*)result = bb_strtol(arg, NULL, 0);
 }
 static void conv_strtod(char *arg, void *result)
 {

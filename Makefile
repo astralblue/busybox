@@ -423,6 +423,7 @@ core-y		:= \
 
 libs-y		:= \
 		archival/ \
+		archival/libipkg/ \
 		archival/libunarchive/ \
 		console-tools/ \
 		coreutils/ \
@@ -556,7 +557,7 @@ libs-y		:= $(libs-y1) $(libs-y2)
 #
 # System.map is generated to document addresses of all kernel symbols
 
-busybox-all  := $(core-y) $(libs-y)
+busybox-all  := $(core-y) $(libs-y) -lconfig
 
 # Rule to link busybox - also used during CONFIG_KALLSYMS
 # May be overridden by arch/$(ARCH)/Makefile

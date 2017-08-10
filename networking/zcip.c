@@ -471,7 +471,8 @@ int zcip_main(int argc, char *argv[])
 			}
 			if (memcmp(p.arp.arp_tpa, &ip.s_addr, sizeof(struct in_addr)) == 0 &&
 				p.arp.arp_op == htons(ARPOP_REQUEST) &&
-				memcmp(&eth_addr, &p.arp.arp_tha, ETH_ALEN) != 0) {
+				memcmp(&eth_addr, &p.arp.arp_sha, ETH_ALEN) != 0 &&
+				memcmp(&p.arp.arp_tha, &null_addr, ETH_ALEN) != 0) {
 				target_ip_conflict = 1;
 			}
 

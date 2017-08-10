@@ -376,18 +376,18 @@ int ifconfig_main(int argc, char **argv)
 #endif
 						sai.sin_family = AF_INET;
 						sai.sin_port = 0;
-						if (!strcmp(host, bb_str_default)) {
-							/* Default is special, meaning 0.0.0.0. */
-							sai.sin_addr.s_addr = INADDR_ANY;
-						}
 #if ENABLE_FEATURE_IFCONFIG_BROADCAST_PLUS
-						else if ((host[0] == '+' && !host[1]) && (mask & A_BROADCAST)
+						if ((host[0] == '+' && !host[1]) && (mask & A_BROADCAST)
 						 && (did_flags & (A_NETMASK|A_HOSTNAME)) == (A_NETMASK|A_HOSTNAME)
 						) {
 							/* + is special, meaning broadcast is derived. */
 							sai.sin_addr.s_addr = (~sai_netmask) | (sai_hostname & sai_netmask);
-						}
+						} else
 #endif
+						if (!strcmp(host, bb_str_default)) {
+							/* Default is special, meaning 0.0.0.0. */
+							sai.sin_addr.s_addr = INADDR_ANY;
+						}
 #if ENABLE_FEATURE_IPV6
 						else if (inet_pton(AF_INET6, host, &sai6.sin6_addr) > 0) {
 							int sockfd6;

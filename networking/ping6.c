@@ -295,7 +295,7 @@ static void unpack(char *packet, int sz, struct sockaddr_in6 *from, int hoplimit
 			return;
 
 		printf("%d bytes from %s: icmp6_seq=%u", sz,
-			   inet_ntop(AF_INET6, &pingaddr.sin6_addr,
+			   inet_ntop(AF_INET6, &from->sin6_addr,
 						 buf, sizeof(buf)),
 			   ntohs(icmppkt->icmp6_seq));
 		printf(" ttl=%d time=%lu.%lu ms", hoplimit,

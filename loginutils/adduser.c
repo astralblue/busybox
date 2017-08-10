@@ -45,7 +45,7 @@ static int passwd_study(const char *filename, struct passwd *p)
 		}
 	}
 
-	if (p->pw_gid == 0) {
+	if (p->pw_gid == 55555) {
 		/* EDR check for an already existing gid */
 		while (getgrgid(p->pw_uid) != NULL)
 			p->pw_uid++;
@@ -113,8 +113,9 @@ static int adduser(struct passwd *p, unsigned long flags)
 	/* add to shadow if necessary */
 	file = xfopen(bb_path_shadow_file, "a");
 	fseek(file, 0, SEEK_END);
-	fprintf(file, "%s:!:%ld:%d:%d:%d:::\n",
+	fprintf(file, "%s:%s:%ld:%d:%d:%d:::\n",
 			p->pw_name,             /* username */
+			p->pw_passwd,			/* password */
 			time(NULL) / 86400,     /* sp->sp_lstchg */
 			0,                      /* sp->sp_min */
 			99999,                  /* sp->sp_max */
@@ -162,6 +163,7 @@ int adduser_main(int argc, char **argv)
 {
 	struct passwd pw;
 	const char *usegroup = NULL;
+	char *passwd = NULL; /* For FTP AUTH no Encryption supporting ... */
 	unsigned long flags;
 
 	/* got root? */
@@ -175,7 +177,7 @@ int adduser_main(int argc, char **argv)
 
 	/* check for min, max and missing args and exit on error */
 	opt_complementary = "-1:?1:?";
-	flags = getopt32(argc, argv, "h:g:s:G:DSH", &pw.pw_dir, &pw.pw_gecos, &pw.pw_shell, &usegroup);
+	flags = getopt32(argc, argv, "h:g:s:G:DSHp:", &pw.pw_dir, &pw.pw_gecos, &pw.pw_shell, &usegroup, &passwd);
 
 	/* create string for $HOME if not specified already */
 	if (!pw.pw_dir) {
@@ -185,9 +187,9 @@ int adduser_main(int argc, char **argv)
 
 	/* create a passwd struct */
 	pw.pw_name = argv[optind];
-	pw.pw_passwd = "x";
+	pw.pw_passwd = passwd ? : "x";
 	pw.pw_uid = 0;
-	pw.pw_gid = usegroup ? xgroup2gid(usegroup) : 0; /* exits on failure */
+	pw.pw_gid = usegroup ? xgroup2gid(usegroup) : 55555; /* exits on failure */
 
 	/* grand finale */
 	return adduser(&pw, flags);

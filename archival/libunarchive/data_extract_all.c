@@ -117,3 +117,17 @@ void data_extract_all(archive_handle_t *archive_handle)
 		utime(file_header->name, &t);
 	}
 }
+
+extern void data_extract_all_prefix(archive_handle_t *archive_handle)
+{
+	char *name_ptr = archive_handle->file_header->name;
+
+	name_ptr += strspn(name_ptr, "./");
+	if (name_ptr[0] != '\0') {
+		archive_handle->file_header->name = xmalloc(strlen(archive_handle->buffer) + 1 + strlen(name_ptr) + 1);
+		strcpy(archive_handle->file_header->name, archive_handle->buffer);
+		strcat(archive_handle->file_header->name, name_ptr);
+		data_extract_all(archive_handle);
+	}
+}
+

@@ -27,6 +27,7 @@ lib-$(CONFIG_IPRULE)       += iprule.o
 lib-$(CONFIG_IPTUNNEL)     += iptunnel.o
 lib-$(CONFIG_NAMEIF)       += nameif.o
 lib-$(CONFIG_NC)           += nc.o
+lib-$(CONFIG_NETMSG)       += netmsg.o
 lib-$(CONFIG_NETSTAT)      += netstat.o
 lib-$(CONFIG_NSLOOKUP)     += nslookup.o
 lib-$(CONFIG_PING)         += ping.o

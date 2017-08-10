@@ -18,7 +18,7 @@
 #define arysize(ary)    (sizeof(ary)/sizeof((ary)[0]))
 
 #ifndef CRONTABS
-#define CRONTABS        "/var/spool/cron/crontabs"
+#define CRONTABS        "/etc/crontabs"
 #endif
 #ifndef TMPDIR
 #define TMPDIR          "/var/spool/cron"
@@ -135,6 +135,7 @@ int crond_main(int ac, char **av)
 {
 	unsigned opt;
 	char *lopt, *Lopt, *copt;
+	char *topt, *TimeZone = NULL;
 
 #if ENABLE_DEBUG_CROND_OPTION
 	char *dopt;
@@ -145,11 +146,12 @@ int crond_main(int ac, char **av)
 #endif
 
 	opterr = 0;			/* disable getopt 'errors' message. */
-	opt = getopt32(ac, av, "l:L:fbSc:"
+	opt = getopt32(ac, av, "l:L:fbSc:T:"
 #if ENABLE_DEBUG_CROND_OPTION
 							"d:"
 #endif
 							, &lopt, &Lopt, &copt
+							, &topt
 #if ENABLE_DEBUG_CROND_OPTION
 							, &dopt
 #endif
@@ -166,9 +168,14 @@ int crond_main(int ac, char **av)
 		if (*copt != 0) {
 			CDir = copt;
 		}
+	}	
+	if (opt & 64) {
+		if (*topt != 0) {
+			TimeZone = topt;		
+		}
 	}
 #if ENABLE_DEBUG_CROND_OPTION
-	if (opt & 64) {
+	if (opt & 128) {
 		DebugOpt = xatou(dopt);
 		LogLevel = 0;
 	}
@@ -209,6 +216,13 @@ int crond_main(int ac, char **av)
 
 	SynchronizeDir();
 
+	/* 
+	 * Change the envionment variable `TZ`, so the schedule can work rightly 
+	 * according to the local time formatting.
+	 */
+	if (TimeZone != NULL)
+		setenv("TZ", TimeZone, 1);
+	
 	{
 		time_t t1 = time(NULL);
 		time_t t2;

@@ -89,6 +89,7 @@
        "	-c count	Stop after sending count ARP request packets\n" \
        "	-w timeout	Time to wait for ARP reply, in seconds\n" \
        "	-i device	Outgoing interface name, default is eth0\n" \
+       "	-I device	The same as -i\n" \
        "	-s sender	Set specific sender IP address\n" \
        "	target		Target IP address of ARP request"
 
@@ -1133,6 +1134,82 @@
        "$ ls -la /tmp/busybox*\n" \
        "-rw-rw-r--    1 andersen andersen   554058 Apr 14 17:49 /tmp/busybox.tar.gz\n"
 
+#define ipkg_trivial_usage \
+	"[options]... sub-command [arguments]..."
+#define ipkg_full_usage \
+	"ipkg is an utility to install, remove and manage .ipk packages.\n" \
+	"\n" \
+	"Sub-commands:\n" \
+	"\nPackage Manipulation:\n" \
+	"\tupdate  		Update list of available packages\n" \
+	"\tupgrade			Upgrade all installed packages to latest version\n" \
+	"\tinstall <pkg>		Download and install <pkg> (and dependencies)\n" \
+	"\tinstall <file.ipk>	Install package <file.ipk>\n" \
+	"\tconfigure [<pkg>]	Configure unpacked packages\n" \
+	"\tremove <pkg|regexp>	Remove package <pkg|packages following regexp>\n" \
+	"\tflag <flag> <pkg> ...	Flag package(s) <pkg>\n" \
+	"\t <flag>=hold|noprune|user|ok|installed|unpacked (one per invocation)	\n" \
+	"\n" \
+	"Informational Commands:\n" \
+	"\tlist    		List available packages and descriptions\n" \
+	"\tlist_installed		List all and only the installed packages and description \n" \
+	"\tfiles <pkg>		List all files belonging to <pkg>\n" \
+	"\tsearch <file|regexp>		Search for a package providing <file>\n" \
+	"\tinfo [pkg|regexp [<field>]]	Display all/some info fields for <pkg> or all\n" \
+	"\tstatus [pkg|regexp [<field>]]	Display all/some status fields for <pkg> or all\n" \
+	"\tdownload <pkg>		Download <pkg> to current directory.\n" \
+	"\tcompare_versions <v1> <op> <v2>\n" \
+	"\t                          compare versions using <= < > >= = << >>\n" \
+	"\tprint_architecture      prints the architecture.\n" \
+	"\tprint_installation_architecture\n" \
+	"\twhatdepends [-A] [pkgname|pat]+\n" \
+	"\twhatdependsrec [-A] [pkgname|pat]+\n" \
+	"\twhatprovides [-A] [pkgname|pat]+\n" \
+	"\twhatconflicts [-A] [pkgname|pat]+\n" \
+	"\twhatreplaces [-A] [pkgname|pat]+\n" \
+	"\t                        prints the installation architecture.\n" \
+	"\n" \
+	"\nOptions:\n" \
+	"\t-A                      Query all packages with whatdepends, whatprovides, whatreplaces, whatconflicts\n" \
+	"\t-V <level>               Set verbosity level to <level>. If no value is\n" \
+	"\t--verbosity <level>      provided increase verbosity by one. Verbosity levels:\n" \
+	"\t                         0 errors only\n" \
+	"\t                         1 normal messages (default)\n" \
+	"\t                         2 informative messages\n" \
+	"\t                         3 debug output\n" \
+	"\t-f <conf_file>		Use <conf_file> as the ipkg configuration file\n" \
+	"\t-conf <conf_file>	Default configuration file location\n" \
+	"				is /etc/ipkg.conf\n" \
+	"\t-d <dest_name>		Use <dest_name> as the the root directory for\n" \
+	"\t-dest <dest_name>	package installation, removal, upgrading.\n" \
+	"				<dest_name> should be a defined dest name from\n" \
+	"				the configuration file, (but can also be a\n" \
+	"				directory name in a pinch).\n" \
+	"\t-o <offline_root>	Use <offline_root> as the root directory for\n" \
+	"\t-offline <offline_root>	offline installation of packages.\n" \
+	"\t-verbose_wget		more wget messages\n" \
+	"\n" \
+	"Force Options (use when ipkg is too smart for its own good):\n" \
+	"\t-force-depends		Make dependency checks warnings instead of errors\n" \
+	"\t				Install/remove package in spite of failed dependences\n" \
+	"\t-force-defaults		Use default options for questions asked by ipkg.\n" \
+	"				(no prompts). Note that this will not prevent\n" \
+	"				package installation scripts from prompting.\n" \
+	"\t-force-reinstall 	Allow ipkg to reinstall a package.\n" \
+	"\t-force-overwrite 	Allow ipkg to overwrite files from another package during an install.\n" \
+	"\t-force-downgrade 	Allow ipkg to downgrade packages.\n" \
+	"\t-force_space            Install even if there does not seem to be enough space.\n" \
+	"\t-noaction               No action -- test only\n" \
+	"\t-nodeps                 Do not follow dependences\n" \
+	"\t-force-removal-of-dependent-packages\n" \
+	"\t-recursive	 	Allow ipkg to remove package and all that depend on it.\n" \
+	"\t-test                   No action -- test only\n" \
+	"\t-t	 	        Specify tmp-dir.\n" \
+	"\t--tmp-dir 	        Specify tmp-dir.\n" \
+	"\n" \
+	"\tregexp could be something like 'pkgname*' '*file*' or similar\n" \
+	"\teg: ipkg info 'libstd*' or ipkg search '*libop*' or ipkg remove 'libncur*'\n"
+
 #define halt_trivial_usage \
        "[-d<delay>] [-n<nosync>] [-f<force>]"
 #define halt_full_usage \
@@ -1257,7 +1334,8 @@
 	USE_FEATURE_HTTPD_BASIC_AUTH(" [-r <realm>]") \
 	USE_FEATURE_HTTPD_AUTH_MD5(" [-m pass]") \
        " [-h home]" \
-       " [-d/-e <string>]"
+       " [-d/-e <string>]" \
+       " [-R <path> [-H <host>]]"
 #define httpd_full_usage \
        "Listen for incoming http server requests" \
        "\n\nOptions:\n" \
@@ -1273,7 +1351,9 @@
        "	-m PASS		Crypt PASS with md5 algorithm\n") \
        "	-h HOME		Specifies http HOME directory (default ./)\n" \
        "	-e STRING	HTML encode STRING\n" \
-       "	-d STRING	URL decode STRING"
+       "	-d STRING	URL decode STRING\n" \
+       "	-R PATH 	Redirect target path\n" \
+       "	-H HOST 	Redirect target host"
 
 #define hwclock_trivial_usage \
        "[-r|--show] [-s|--hctosys] [-w|--systohc] [-l|--localtime] [-u|--utc]"
@@ -3043,6 +3123,11 @@
 	USE_FEATURE_REMOTE_LOG( \
        "\n	-R HOST[:PORT]	Log to IP or hostname on PORT (default PORT=514/UDP)" \
        "\n	-L		Log locally and via network logging (default is network only)") \
+	USE_FEATURE_TIMEZONE_LOG( \
+       "\n	-T TIMEZONE	Set the Time Zone to fix the time of each log message") \
+	 USE_FEATURE_VENDOR_FORMAT_LOG( \
+       "\n     -c logcategory  separate the different log message" \
+       "\n	-V VENDOR_NAME	Set the specific Vendor Required Format message in log, like NETGEAR") \
 	USE_FEATURE_IPC_SYSLOG( \
        "\n	-C[size(KiB)]	Log to a shared mem buffer (read the buffer using logread)")
 	/* NB: -Csize shouldn't have space (because size is optional) */
@@ -3511,7 +3596,7 @@
 #define wget_trivial_usage \
        "[-c|--continue] [-q|--quiet] [-O|--output-document file]\n" \
        "		[--header 'header: value'] [-Y|--proxy on/off] [-P DIR]\n" \
-       "		[-U|--user-agent agent] url"
+       "		[-U|--user-agent agent] url [-T|--timeout seconds]"
 #define wget_full_usage \
        "Retrieve files via HTTP or FTP" \
        "\n\nOptions:\n" \
@@ -3520,7 +3605,8 @@
        "	-P	Set directory prefix to DIR\n" \
        "	-O	Save to filename ('-' for stdout)\n" \
        "	-U	Adjust 'User-Agent' field\n" \
-       "	-Y	Use proxy ('on' or 'off')"
+       "	-Y	Use proxy ('on' or 'off')\n" \
+       "	-T      Set timeout value to seconds"
 
 #define which_trivial_usage \
        "[COMMAND ...]"

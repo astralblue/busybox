@@ -458,6 +458,12 @@ config NC
 	help
 	  A simple Unix utility which reads and writes data across network
 	  connections.
+	  
+config NETMSG
+	bool "netmsg"
+	default n
+	help
+	  simple program for sending udp broadcast messages
 
 config NC_SERVER
 	bool "Netcat server options (-lp)"
@@ -667,6 +673,13 @@ config FEATURE_TRACEROUTE_USE_ICMP
 	depends on TRACEROUTE
 	help
 	  Add feature to allow for ICMP ECHO instead of UDP datagrams.
+
+config FEATURE_DNI_BAND_CHECK
+	bool "Enable band width check"
+	default n
+	depends on TRACEROUTE
+	help
+	  Add option to allow NETGEAR uplink band width check
 
 source networking/udhcp/Config.in
 

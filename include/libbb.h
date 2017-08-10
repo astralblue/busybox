@@ -17,7 +17,9 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#ifndef __APPLE__
 #include <malloc.h>
+#endif
 #include <netdb.h>
 #include <setjmp.h>
 #include <signal.h>
@@ -30,7 +32,9 @@
 #include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#ifndef __APPLE__
 #include <sys/statfs.h>
+#endif
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -607,6 +611,7 @@ typedef struct {
 	/* sizeof(task_struct.comm) in /usr/include/linux/sched.h */
 	char state[4];
 	char comm[COMM_LEN];
+	long nice;
 //	user/group? - use passwd/group parsing functions
 } procps_status_t;
 enum {
@@ -621,10 +626,11 @@ enum {
 	PSSCAN_RSS      = 1 << 8,
 	PSSCAN_STIME    = 1 << 9,
 	PSSCAN_UTIME    = 1 << 10,
+	PSSCAN_NI       = 1 << 11,
 	/* These are all retrieved from proc/NN/stat in one go: */
 	PSSCAN_STAT     = PSSCAN_PPID | PSSCAN_PGID | PSSCAN_SID
 	                | PSSCAN_COMM | PSSCAN_STATE
-	                | PSSCAN_RSS | PSSCAN_STIME | PSSCAN_UTIME,
+	                | PSSCAN_RSS | PSSCAN_STIME | PSSCAN_UTIME |PSSCAN_NI,
 };
 procps_status_t* alloc_procps_scan(int flags);
 void free_procps_scan(procps_status_t* sp);
@@ -637,6 +643,7 @@ extern const char bb_uuenc_tbl_base64[];
 extern const char bb_uuenc_tbl_std[];
 void bb_uuencode(const unsigned char *s, char *store, const int length, const char *tbl);
 
+typedef enum { HASH_SHA1, HASH_MD5 } hash_algo_t;
 typedef struct sha1_ctx_t {
 	uint32_t count[2];
 	uint32_t hash[5];
@@ -658,6 +665,8 @@ typedef struct md5_ctx_t {
 void md5_begin(md5_ctx_t *ctx);
 void md5_hash(const void *data, size_t length, md5_ctx_t *ctx);
 void *md5_end(void *resbuf, md5_ctx_t *ctx);
+unsigned char *hash_bin_to_hex(unsigned char *hash_value, unsigned hash_length);
+uint8_t *hash_file(const char *filename, hash_algo_t hash_algo);
 
 uint32_t *crc32_filltable(int endian);
 
